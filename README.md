@@ -16,7 +16,7 @@ If you have problems installing `terra`, there are more details about installing
 
 ### Global Fishing Watch API token
 
-To access Global Fishing Watch data, you will need an API token stored on your computer. The token is like a code that you need to able to access the data. This is free, but you need to register for a [Global Fishing Watch account](https://gateway.api.globalfishingwatch.org/auth?client=gfw&callback=https%3A%2F%2Fglobalfishingwatch.org%2Four-apis%2Ftokens&locale=en&_gl=1*cxpc0o*_gcl_au*NTAwNjIxOTE5LjE3Mzc1MTkzMTY.*_ga*MTQxNzMzMDU2NC4xNzM3NTE5MzE2*_ga_5W83X3EYGW*MTczNzUxOTMxNi4xLjEuMTczNzUyMTEyMC42MC4wLjEwNjUwNzY1MjM.*_ga_M5J2ZHDZMV*MTczNzUxOTMxNi4xLjEuMTczNzUyMTEyNi42MC4wLjE1NjQ4Njc1NzU.) if you don't already have one. Then you can request an (API access token)[<https://globalfishingwatch.org/our-apis/tokens>]. Here is an example of how I filled in the details requested:
+To access Global Fishing Watch data, you will need an API token stored on your computer. The token is like a code that you need to able to access the data. This is free, but you need to register for a [Global Fishing Watch account](https://gateway.api.globalfishingwatch.org/auth?client=gfw&callback=https%3A%2F%2Fglobalfishingwatch.org%2Four-apis%2Ftokens&locale=en&_gl=1*cxpc0o*_gcl_au*NTAwNjIxOTE5LjE3Mzc1MTkzMTY.*_ga*MTQxNzMzMDU2NC4xNzM3NTE5MzE2*_ga_5W83X3EYGW*MTczNzUxOTMxNi4xLjEuMTczNzUyMTEyMC42MC4wLjEwNjUwNzY1MjM.*_ga_M5J2ZHDZMV*MTczNzUxOTMxNi4xLjEuMTczNzUyMTEyNi42MC4wLjE1NjQ4Njc1NzU.) if you don't already have one. Then you can request an [API access token](https://globalfishingwatch.org/our-apis/tokens). Here is an example of how I filled in the details requested:
 
 ![](figures/gfw_api_token.jpeg)
 
