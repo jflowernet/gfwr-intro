@@ -1,0 +1,6 @@
+---
+title: "Introduction to Global Fishing Watch data in R"
+author: "Jason Flower"
+format: html
+---
+
