@@ -22,7 +22,7 @@ To access Global Fishing Watch data, you will need an API token stored on your c
 
 Once you have created the token, you need to copy it into your `.Renviron` file. You can do this by:
 
-1.  Run `usethis::edit_r_environ()`, which should open you `.Renviron` file.
+1.  Running `usethis::edit_r_environ()`, which should open you `.Renviron` file.
 2.  Add the words `GFW_TOKEN="PASTE_YOUR_TOKEN_HERE"` to the file, replacing "PASTE_YOUR_TOKEN_HERE" with your API token. 
 3.  Save the `.Renviron` file, and restart your R session, e.g. close and re-open RStudio.
 
