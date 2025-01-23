@@ -12,6 +12,8 @@ install.packages(c("terra", "ggplot2", "usethis", "remotes"))
 remotes::install_github("GlobalFishingWatch/gfwr")
 ```
 
+If you have used `gfwr` before, make sure you have the most recent version (`v2.0.1` at the time of writing).
+
 If you have problems installing `terra`, there are more details about installing it [here](https://rspatial.github.io/terra/index.html).
 
 ### Global Fishing Watch API token

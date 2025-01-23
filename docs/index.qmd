@@ -1,6 +1,195 @@
 ---
 title: "Introduction to Global Fishing Watch data in R"
 author: "Jason Flower"
-format: html
+format: 
+  html:
+    embed-resources: true
 ---
 
+[Global Fishing Watch](https://globalfishingwatch.org/) (GFW) provide access to their database of apparent fishing effort and vessel tracks via the [`gfwr` package](https://github.com/GlobalFishingWatch/gfwr). This workshop will show you how to download, summarize and visualize fishing effort data in R. GFW use machine learning to predict when vessels identified as fishing vessels are fishing. The model is not 100% accurate and another important caveat is that only vessels that use the automatic vessel identification system (AIS) are present in the data: principally larger vessel (> 24m in length); less than 1% of vessels <12 m length are represented in the data (see [GFW website](https://globalfishingwatch.org/dataset-and-code-fishing-effort/) for detailed information).
+
+To access GFW data, you need an API token. See the [prerequisites section](../README.md) for how to get this and save it ready for use in R.
+
+```{r}
+#| message: false
+#load the libraries we will need
+library(terra)
+library(dplyr)
+library(tidyr)
+library(sf)
+library(gfwr)
+```
+
+# Downloading fishing effort data
+
+We will use the function `get_raster()` from `gfwr` to download some fishing effort data. We need to give `get_raster()` several pieces of information, as documented on the [`gfwr` website](https://github.com/GlobalFishingWatch/gfwr?tab=readme-ov-file#fishing-effort-api):
+
+* The spatial resolution, which can be `LOW` (0.1 degree) or `HIGH` (0.01 
+degree)
+* The temporal resolution, which can be `HOURLY`, `DAILY`, `MONTHLY`, `YEARLY` 
+or `ENTIRE`.
+* The variable to group by: `FLAG`, `GEARTYPE`, `FLAGANDGEARTYPE`, `MMSI` or 
+`VESSEL_ID`
+* The date range `note: this must be 366 days or less`
+* The region polygon in `sf` format or the region code (such as an EEZ code) to
+filter the raster
+* The source for the specified region. Currently, `EEZ`, `MPA`, `RFMO` or 
+`USER_SHAPEFILE` (for `sf` shapefiles).
+
+In this example, we will download 2022 fishing effort data for Vanuatu's EEZ. 
+
+We need a polygon of Vanuatu's EEZ to include in our query to GFW. I generally get EEZ and other marine boundaries from the [Marine Regions](https://marineregions.org/) website, which also has an R package, [`mregions2`](https://docs.ropensci.org/mregions2/), for downloading data within R (though see emLab's [`spatialgridr`](https://github.com/emlab-ucsb/spatialgridr) package for a simpler function `get_boundary()` for downloading both marine and terrestrial boundaries). For now, we can download Vanuatu's EEZ direct from the Marine Regions website:
+
+```{r}
+#| message: false
+
+vanuatu_eez <- st_read("https://geo.vliz.be/geoserver/wfs?request=getfeature&service=wfs&version=1.1.0&typename=MarineRegions:eez&filter=%3CFilter%3E%3CPropertyIsEqualTo%3E%3CPropertyName%3Emrgid_eez%3C/PropertyName%3E%3CLiteral%3E8313%3C/Literal%3E%3C/PropertyIsEqualTo%3E%3C/Filter%3E") %>%
+  st_set_crs(4326) # we have to set the coordinate reference system since non is included in the web format we downloaded
+```
+
+Using only the exact boundary of the EEZ can result in some data close to the boundary not being included, so I will use the bounding box of the EEZ polygon. We might also want to see the fishing effort in the area surrounding the EEZ.
+
+```{r}
+vanuatu_bbox <- vanuatu_eez %>% 
+  st_bbox() %>%
+  st_as_sfc() %>%
+  st_sf()
+```
+
+Now we can build our query to get our fishing effort data:
+
+```{r}
+vanuatu_fishing_effort <- get_raster(spatial_resolution = 'LOW', 
+                                   temporal_resolution = 'YEARLY',
+                                   group_by = 'FLAGANDGEARTYPE',
+                                   start_date = "2022-01-01",
+                                   end_date = "2022-12-31", 
+                                   region = vanuatu_bbox, 
+                                   region_source = 'USER_SHAPEFILE')
+```
+
+
+Let's have a look at what we got:
+
+```{r}
+head(vanuatu_fishing_effort)
+```
+
+This is a tibble of `Apparent Fishing Hours` within Vanuatu's EEZ for the year 2022, and we have the coordinates (`Lat` and `Lon`) where the fishing took place, as well as the the type of fishing gear, vessel flag, and vessel ID.
+
+## Summarizing the data
+
+We have spatial data, so the first thing I want to do is make a map! But at the moment, there may be more than one value in each grid cell (Latitude and Longitude), because more than one vessel might have fished in each cell. We can get the total fishing effort in each grid cell:
+
+```{r}
+#| message: false
+vanuatu_total_fishing_effort <- vanuatu_fishing_effort %>% 
+  group_by(Lon, Lat) %>% 
+  summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>% 
+  ungroup()
+```
+
+## Rasterizing the data
+
+Ok, so now we have the total fishing effort in each cell. I am going to turn this data into a raster so that we can map it easily. We use the `terra` package for this:
+
+```{r}
+vanuatu_effort_2022_raster <- vanuatu_total_fishing_effort %>%
+    rast(type = "xyz", crs = "epsg:4326") # we need to have data in xyz format for this to work: first column is "Longitude", next "Latitude" and finally the values we want, in our case fishing effort.
+```
+
+## Mapping
+
+We now have a raster that we can plot:
+
+```{r}
+plot(vanuatu_effort_2022_raster)
+```
+
+We have a map! There is on cell, outside the EEZ in the south west corner, that has a much higher value than all others. This results in most cells having the same colour on the colour scale. We can set any value outside the EEZ polygon to NA, called masking, and this will remove the pesky outlier:
+
+```{r}
+vanuatu_effort_2022_raster <- vanuatu_effort_2022_raster %>%
+  mask(vanuatu_eez) #this sets any values outside the EEZ polygon to NA
+```
+
+Ok, lets map this again:
+
+```{r}
+plot(vanuatu_effort_2022_raster)
+lines(vanuatu_eez, col = "grey40") #add the EEZ boundary as grey line
+```
+
+Much nicer! Why do you think there is no fishing effort around the islands? Is there really no fishing effort?
+
+<details>
+<summary>Click for answers!</summary>
+
+Lets get the 12nm boundary for Vanuatu from Marine Regions and plot that:
+
+```{r}
+#| class-source: fold-hide
+#| message: false
+
+vanuatu_24nm <- st_read("https://geo.vliz.be/geoserver/wfs?request=getfeature&service=wfs&version=1.1.0&typename=MarineRegions:eez_24nm&filter=%3CFilter%3E%3CPropertyIsEqualTo%3E%3CPropertyName%3Emrgid_eez%3C/PropertyName%3E%3CLiteral%3E8313%3C/Literal%3E%3C/PropertyIsEqualTo%3E%3C/Filter%3E") %>%
+  st_set_crs(4326)
+
+plot(vanuatu_effort_2022_raster)
+lines(vanuatu_eez, col = "grey40")
+lines(vanuatu_24nm, col = "red")
+
+```
+
+Now we can see that there is minimal fishing effort within the 24nm contiguous zone. This is because foreign based tuna fishing vessels are not allowed to fish within this zone. 
+
+Although our map shows minimal fishing effort, it is important to remember that only vessels with AIS are represented in this data. Smaller, vessels with no AIS might be fishing within the 24nm zone, but they won't show up in GFW data.
+</details>
+
+## Fishing effort by flag country
+
+Several countries fish within Vanuatu's EEZ. We lets summarize our original GFW data, but this time include Flag: 
+
+```{r}
+#| message: false
+vanuatu_total_flag_fishing_effort <- vanuatu_fishing_effort %>% 
+  group_by(Lon, Lat, Flag) %>% 
+  summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>% 
+  ungroup()
+
+head(vanuatu_total_flag_fishing_effort)
+```
+
+We can turn this into a raster with one layer for each country flag, but we will need to make the data "wide", so that each country's effort is in its own column, This is a job for the `pivot_wider()` function from the `tidyr` package:
+
+```{r}
+vanuatu_total_flag_fishing_effort_wide <- vanuatu_total_flag_fishing_effort %>%
+  pivot_wider(names_from = Flag, 
+              values_from = total_effort)
+
+head(vanuatu_total_flag_fishing_effort_wide)
+```
+
+We can now make this into a multi-layer raster. Each column after the "Lon" and "Lat" columns will be made into a separate raster layer, i.e. we will have one layer per country flag
+
+```{r}
+vanuatu_effort_flag_raster <- vanuatu_total_flag_fishing_effort_wide %>%
+  rast(type = "xyz", crs = "epsg:4326") 
+```
+
+Lets try plotting and see what we get!
+
+```{r}
+plot(vanuatu_effort_flag_raster, fun = function(x)lines(vanuatu_eez))
+```
+
+
+
+## NOTES
+
+As noted above, you can provide an EEZ code to `get_raster()`, but how do we get the EEZ code? Happily, there is `get_region_id()`, which allows us to find the code using the name of the region:
+
+```{r}
+(vanuatu_code <- get_region_id("Vanuatu"))
+```
+
+We only want the id, which we can get by selecting that column like this: `vanuatu_code$id`.
