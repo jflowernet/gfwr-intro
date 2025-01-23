@@ -17,6 +17,7 @@ library(terra)
 library(dplyr)
 library(tidyr)
 library(sf)
+library(ggplot2)
 library(gfwr)
 ```
 
@@ -182,6 +183,68 @@ Lets try plotting and see what we get!
 plot(vanuatu_effort_flag_raster, fun = function(x)lines(vanuatu_eez))
 ```
 
+From this we can see that most of the fishing is done by Fiji (FJI) and China (CHN). The only problem if we want to do a quantitative analysis is that we have fishing effort outside the EEZ as well. We can easily mask out values outside the EEZ, but lets see what happens when we then plot:
+
+```{r}
+vanuatu_effort_flag_raster_masked <- mask(vanuatu_effort_flag_raster, vanuatu_eez)
+
+plot(vanuatu_effort_flag_raster_masked)
+```
+
+Several country flags have no fishing effort within the EEZ, but there is still a space for them in the plot since they are NAs. We can remove these using the following code, which only selects layers that sum to more than zero:
+
+```{r}
+vanuatu_effort_flag_raster_masked_eez <- vanuatu_effort_flag_raster_masked %>%
+  subset(which(global(vanuatu_effort_flag_raster_masked, "sum", na.rm = TRUE) > 0))
+
+plot(vanuatu_effort_flag_raster_masked_eez, fun = function(x)lines(vanuatu_eez))
+```
+
+Great, we now have only the data within the EEZ. Lets make a plot of fishing effort by flag:
+
+```{r}
+vanuatu_effort_flag_raster_masked_eez %>%
+  global("sum", na.rm = TRUE) %>% #get the sum of values in each layer
+  tibble::rownames_to_column("Flag") %>% #create a column with the Flag (it got converted to rownames)
+  ggplot() +
+    geom_col(aes(x= Flag, y = sum, fill = Flag)) + 
+    ylab("Total fishing effort in 2022") +
+    theme_bw()
+```
+
+So we now see clearly the relative contributions of each flag state to the fishing effort in Vanuatu in 2022.
+
+## Fishing effort by gear type
+
+Lets repeat the same analysis we did for flag state, but this time for gear type. We already have gear type in the data we downloaded, so we just need to do the same summarizing and rasterizing we did before:
+
+```{r}
+vanuatu_effort_gear_raster <- vanuatu_fishing_effort %>% 
+  group_by(Lon, Lat, Geartype) %>% 
+  summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>%  #total fishing effort for each geartype
+  ungroup() %>%
+  pivot_wider(names_from = Geartype,   #each geartype fishing effort becomes a column
+              values_from = total_effort) %>% 
+  rast(type = "xyz", crs = "epsg:4326") %>% #create the raster
+  mask(vanuatu_eez) %>% #mask values outside the EEZ
+  subset(., which(global(., "sum", na.rm = TRUE) > 0)) #remove any layers that are NA
+  
+plot(vanuatu_effort_gear_raster)
+```
+
+So we can see that drifting longlines are the predominant fishing gear. The 'fishing' category refers to "fishing vessels that could not be more specifically classified" by GFW, so don't know what type of gear they are using, but they are fishing.
+
+We can create a graph, same as before:
+
+```{r}
+vanuatu_effort_gear_raster %>%
+  global("sum", na.rm = TRUE) %>% #get the sum of values in each layer
+  tibble::rownames_to_column("Gear") %>% #create a column with the Gear (it got converted to rownames)
+  ggplot() +
+    geom_col(aes(x= Gear, y = sum, fill = Gear)) + 
+    ylab("Total fishing effort in 2022") +
+    theme_bw()
+```
 
 
 ## NOTES
