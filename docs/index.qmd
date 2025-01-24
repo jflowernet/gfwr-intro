@@ -8,7 +8,9 @@ format:
 
 [Global Fishing Watch](https://globalfishingwatch.org/) (GFW) provide access to their database of apparent fishing effort and vessel tracks via the [`gfwr` package](https://github.com/GlobalFishingWatch/gfwr). This workshop will show you how to download, summarize and visualize fishing effort data in R. GFW use machine learning to predict when vessels identified as fishing vessels are fishing. The model is not 100% accurate and another important caveat is that only vessels that use the automatic vessel identification system (AIS) are present in the data: principally larger vessel (> 24m in length); less than 1% of vessels <12 m length are represented in the data (see [GFW website](https://globalfishingwatch.org/dataset-and-code-fishing-effort/) for detailed information).
 
-To access GFW data, you need an API token. See the [prerequisites section](../README.md) for how to get this and save it ready for use in R.
+There is a great tutorial on making maps with `gfwr` on their [website](https://globalfishingwatch.github.io/gfwr/articles/making-maps.html). Especially useful if you want to make nice ggplot maps.
+
+To access GFW data, you need an API token. See the [prerequisites section](./README.md) for how to get this and save it ready for use in R.
 
 ```{r}
 #| message: false
@@ -89,6 +91,8 @@ vanuatu_total_fishing_effort <- vanuatu_fishing_effort %>%
   summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>% 
   ungroup()
 ```
+
+It is important that you do `group_by(Lon, Lat)` and not `group_by(Lat, Lon)` because in the next step, the coordinate columns need to be in the order longitude followed by latitude.
 
 ## Rasterizing the data
 
@@ -246,13 +250,89 @@ vanuatu_effort_gear_raster %>%
     theme_bw()
 ```
 
+## Multiple years of GFW data
 
-## NOTES
-
-As noted above, you can provide an EEZ code to `get_raster()`, but how do we get the EEZ code? Happily, there is `get_region_id()`, which allows us to find the code using the name of the region:
+Unfortunately you can only get data for one year at a time from Global Fishing Watch using the `gfwr` package. If we want more than one year we can use a loop. Here is some code that you can use if you want to get several years of data:
 
 ```{r}
-(vanuatu_code <- get_region_id("Vanuatu"))
+start_year <- 2020
+end_year <- 2022
+
+#get GFW fishing effort data for each year. lapply creates a list with each years data as an element in the list
+vanuatu_fishing_2020_2022 <- lapply(start_year:end_year, function(yr) {
+  get_raster(
+    spatial_resolution = 'LOW',
+    temporal_resolution = "YEARLY",
+    group_by = "GEARTYPE",
+    start_date = paste0(yr, "-01-01"),
+    end_date = paste0(yr, "-12-31"),
+    region = vanuatu_bbox,
+    region_source = "USER_SHAPEFILE"
+  )
+}) %>% 
+   do.call(bind_rows, .)
 ```
 
-We only want the id, which we can get by selecting that column like this: `vanuatu_code$id`.
+We can now use similar code as before to get the annual total fishing effort.
+
+```{r}
+vanuatu_fishing_2020_2022_raster <- vanuatu_fishing_2020_2022 %>% 
+  group_by(Lon, Lat, `Time Range`) %>% #time range just has the year in it
+  summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>%
+  ungroup() %>%
+  pivot_wider(names_from = `Time Range`, values_from = total_effort) %>%
+  rast(type = "xyz", crs = "epsg:4326") %>%
+  mask(vanuatu_eez)
+
+plot(vanuatu_fishing_2020_2022_raster, fun = function(x)lines(vanuatu_eez))
+```
+
+## Vessel tracks
+
+What if we want to find info for a particular vessel? We can do that using 
+
+
+```{r}
+#| eval: false
+
+#which vessel did most fishing in 2022
+vessel_fishing_effort <- get_raster(spatial_resolution = 'LOW', 
+                                   temporal_resolution = 'YEARLY',
+                                   group_by = 'VESSEL_ID',
+                                   start_date = "2022-01-01",
+                                   end_date = "2022-12-31", 
+                                   region = vanuatu_bbox, 
+                                   region_source = 'USER_SHAPEFILE')
+
+(vessel_total_effort <- vessel_fishing_effort %>%
+  group_by(`Vessel ID`) %>%
+  summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>%
+  ungroup() %>%
+  arrange(desc(total_effort)))
+
+fishing_events <- get_event(event_type = "FISHING",
+          vessels = vessel_total_effort$`Vessel ID`[1],
+          start_date = "2022-01-01",
+          end_date = "2022-12-31")
+
+
+fishing_events_sf <- st_as_sf(fishing_events, 
+         coords = c("lon", "lat"),
+         crs = 4326) 
+  
+plot(st_geometry(fishing_events_sf))
+
+vessel_tracks <- fishing_events_sf %>%
+  arrange(end) %>%
+  mutate(month = months(end)) %>%
+  group_by(month) %>% 
+  summarise() %>%
+  st_cast(to = "MULTILINESTRING")
+  
+
+ggplot() +
+  geom_sf(data = vanuatu_eez) +
+  geom_sf(data = vessel_tracks,aes(col = month))
+```
+
+
