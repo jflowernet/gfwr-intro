@@ -3,27 +3,60 @@ title: "Introduction to Global Fishing Watch data in R"
 author: "Jason Flower"
 format: 
   html:
+    toc: true
     embed-resources: true
 ---
+
+This workshop will provide you with an introduction to downloading and visualizing Global Fishing Watch data in R. Global Fishing Watch provides data on apparent fishing effort, vessel tracks and events, and more; see the [website](https://globalfishingwatch.org/) for details.
+
+## Prerequisites
+
+We will use the `gfwr` package to access Global Fishing Watch data. You will also need packages for manipulating and visualizing the data. You can install all these packages using the following code:
+
+```{r}
+#| eval: false
+
+install.packages(c("terra", "sf", "dplyr", "tidyr", "ggplot2", "usethis", "remotes"))
+
+remotes::install_github("GlobalFishingWatch/gfwr")
+```
+
+If you have used `gfwr` before, make sure you are using `v2` or higher as there were some major changes.
+
+If you have problems installing `terra`, there are more details about installing it [here](https://rspatial.github.io/terra/index.html).
+
+### Global Fishing Watch API token
+
+To access Global Fishing Watch data, you will need an API token stored on your computer. The token is like a code that you need to able to access the data. This is free, but you need to register for a [Global Fishing Watch account](https://gateway.api.globalfishingwatch.org/auth?client=gfw&callback=https%3A%2F%2Fglobalfishingwatch.org%2Four-apis%2Ftokens&locale=en&_gl=1*cxpc0o*_gcl_au*NTAwNjIxOTE5LjE3Mzc1MTkzMTY.*_ga*MTQxNzMzMDU2NC4xNzM3NTE5MzE2*_ga_5W83X3EYGW*MTczNzUxOTMxNi4xLjEuMTczNzUyMTEyMC42MC4wLjEwNjUwNzY1MjM.*_ga_M5J2ZHDZMV*MTczNzUxOTMxNi4xLjEuMTczNzUyMTEyNi42MC4wLjE1NjQ4Njc1NzU.) if you don't already have one. Then you can request an [API access token](https://globalfishingwatch.org/our-apis/tokens). Here is an example of how I filled in the details requested:
+
+![](figures/gfw_api_token.jpeg)
+Once you have created the token, you need to copy it into your `.Renviron` file. You can do this by:
+
+1.  Running `usethis::edit_r_environ()`, which should open your `.Renviron` file.
+2.  Add the words `GFW_TOKEN="PASTE_YOUR_TOKEN_HERE"` to the file, replacing "PASTE_YOUR_TOKEN_HERE" with your API token. 
+3.  Save the `.Renviron` file, and restart your R session, e.g. close and re-open RStudio.
+
+That should be it. If you have any problems, drop me a line before the workshop and we will sort it out!
+
+## Introduction
 
 [Global Fishing Watch](https://globalfishingwatch.org/) (GFW) provide access to their database of apparent fishing effort and vessel tracks via the [`gfwr` package](https://github.com/GlobalFishingWatch/gfwr). This workshop will show you how to download, summarize and visualize fishing effort data in R. GFW use machine learning to predict when vessels identified as fishing vessels are fishing. The model is not 100% accurate and another important caveat is that only vessels that use the automatic vessel identification system (AIS) are present in the data: principally larger vessel (> 24m in length); less than 1% of vessels <12 m length are represented in the data (see [GFW website](https://globalfishingwatch.org/dataset-and-code-fishing-effort/) for detailed information).
 
 There is a great tutorial on making maps with `gfwr` on their [website](https://globalfishingwatch.github.io/gfwr/articles/making-maps.html). Especially useful if you want to make nice ggplot maps.
 
-To access GFW data, you need an API token. See the [prerequisites section](./README.md) for how to get this and save it ready for use in R.
 
 ```{r}
 #| message: false
 #load the libraries we will need
-library(terra)
-library(dplyr)
-library(tidyr)
-library(sf)
-library(ggplot2)
-library(gfwr)
+library(terra) #raster and vector geospatial data handling
+library(dplyr) #data manipulation and summarizing
+library(tidyr) #making "long" data "wide"
+library(sf) #vector geospatial data handling
+library(ggplot2) #plots
+library(gfwr) #downloading GFW data
 ```
 
-# Downloading fishing effort data
+## Downloading fishing effort data
 
 We will use the function `get_raster()` from `gfwr` to download some fishing effort data. We need to give `get_raster()` several pieces of information, as documented on the [`gfwr` website](https://github.com/GlobalFishingWatch/gfwr?tab=readme-ov-file#fishing-effort-api):
 
@@ -130,7 +163,7 @@ Much nicer! Why do you think there is no fishing effort around the islands? Is t
 <details>
 <summary>Click for answers!</summary>
 
-Lets get the 12nm boundary for Vanuatu from Marine Regions and plot that:
+Lets get the 124nm boundary for Vanuatu from Marine Regions and plot that:
 
 ```{r}
 #| class-source: fold-hide
@@ -152,7 +185,7 @@ Although our map shows minimal fishing effort, it is important to remember that 
 
 ## Fishing effort by flag country
 
-Several countries fish within Vanuatu's EEZ. We lets summarize our original GFW data, but this time include Flag: 
+Several countries fish within Vanuatu's EEZ. Lets summarize our original GFW data, but this time include Flag: 
 
 ```{r}
 #| message: false
@@ -287,15 +320,12 @@ vanuatu_fishing_2020_2022_raster <- vanuatu_fishing_2020_2022 %>%
 plot(vanuatu_fishing_2020_2022_raster, fun = function(x)lines(vanuatu_eez))
 ```
 
-## Vessel tracks
+## Vessel information
 
-What if we want to find info for a particular vessel? We can do that using 
+What if we want to find info for a particular vessel? Lets find which vessel did the most fishing (greatest fishing effort) within Vanuatu and the surrounding area. First we retrieve fishing effort data for 2022, including the vessel ID in the data:
 
 
 ```{r}
-#| eval: false
-
-#which vessel did most fishing in 2022
 vessel_fishing_effort <- get_raster(spatial_resolution = 'LOW', 
                                    temporal_resolution = 'YEARLY',
                                    group_by = 'VESSEL_ID',
@@ -303,36 +333,75 @@ vessel_fishing_effort <- get_raster(spatial_resolution = 'LOW',
                                    end_date = "2022-12-31", 
                                    region = vanuatu_bbox, 
                                    region_source = 'USER_SHAPEFILE')
+```
 
-(vessel_total_effort <- vessel_fishing_effort %>%
+Next, we find the total fishing effort for each vessel ID, and arrange the data in order of highest to lowest fishing effort:
+
+```{r}
+vessel_total_effort <- vessel_fishing_effort %>%
   group_by(`Vessel ID`) %>%
   summarise(total_effort = sum(`Apparent Fishing Hours`, na.rm = TRUE)) %>%
   ungroup() %>%
-  arrange(desc(total_effort)))
+  arrange(desc(total_effort))
 
-fishing_events <- get_event(event_type = "FISHING",
-          vessels = vessel_total_effort$`Vessel ID`[1],
-          start_date = "2022-01-01",
-          end_date = "2022-12-31")
-
-
-fishing_events_sf <- st_as_sf(fishing_events, 
-         coords = c("lon", "lat"),
-         crs = 4326) 
-  
-plot(st_geometry(fishing_events_sf))
-
-vessel_tracks <- fishing_events_sf %>%
-  arrange(end) %>%
-  mutate(month = months(end)) %>%
-  group_by(month) %>% 
-  summarise() %>%
-  st_cast(to = "MULTILINESTRING")
-  
-
-ggplot() +
-  geom_sf(data = vanuatu_eez) +
-  geom_sf(data = vessel_tracks,aes(col = month))
+head(vessel_total_effort)
 ```
 
+The first row is the vessel with the highest total fishing effort. This vessel ID is a code that GFW uses to identify vessels within its own databases. A lot of work goes into matching a vessel to an ID, see [here](https://globalfishingwatch.github.io/gfwr/articles/identity) for the GFW vignette devoted to this! We can get a bit more info about our top fishing vessel using the `get_vessel_info()`
+
+```{r}
+top_fisher_info <- get_vessel_info(vessel_fishing_effort$`Vessel ID`[1])
+```
+
+This gives us lots of info in `list` format. We can see the self reported name and other details:
+
+```{r}
+top_fisher_info$selfReportedInfo
+```
+
+We can get vessel event data from GFW using `get_event()`. We can get, there are several categories of event you can query (see `?get_event`), but we are going to retrieve port visits:
+
+```{r}
+port_visits <- get_event(event_type = "PORT_VISIT",
+            vessels = vessel_total_effort$`Vessel ID`[1],
+            start_date = "2022-01-01",
+            end_date = "2022-12-31")
+```
+
+This is a tibble with `r nrow(port_visits)` port visit events in it. We can turn this into a spatial object and plot it against our other data to see which port it is going to:
+
+```{r}
+port_visits_vec <- vect(port_visits,
+                       geom = c("lon", "lat"),
+                       crs = "epsg:4326")
+
+plot(vanuatu_effort_2022_raster)
+lines(vanuatu_eez, col = "grey40")
+points(port_visits_vec)
+```
+
+I don't see the port visit points? Problem is, they are off our mapping area. We can adjust the extent of the map to include them, but first we need to know the full extent of our data:
+
+```{r}
+#extent of the ports visit data
+ports_extent <- ext(port_visits_vec)
+
+#extent of the fishing effort raster
+effort_raster_extent <- ext(vanuatu_effort_2022_raster) 
+
+plot(vanuatu_effort_2022_raster, ext = c(effort_raster_extent[1], ports_extent[2], effort_raster_extent[3], effort_raster_extent[4]))
+lines(vanuatu_eez, col = "grey40")
+points(port_visits_vec)
+```
+
+We can see the points now, but where are they? We can add in Natural Earth country boundaries so that we have a reference for where the port visit points are.
+
+```{r}
+plot(vanuatu_effort_2022_raster, ext = c(effort_raster_extent[1], ports_extent[2], effort_raster_extent[3], effort_raster_extent[4]))
+lines(vanuatu_eez, col = "grey40")
+lines(rnaturalearth::ne_countries(scale = "large", continent = "oceania", returnclass = "sv")) #add in Oceania countries
+points(port_visits_vec)
+```
+
+We can see that the top fishing vessel visits ports in Fiji, probably to unload the catch.
 
