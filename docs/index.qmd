@@ -16,7 +16,7 @@ We will use the `gfwr` package to access Global Fishing Watch data. You will als
 ```{r}
 #| eval: false
 
-install.packages(c("terra", "sf", "dplyr", "tidyr", "ggplot2", "usethis", "remotes"))
+install.packages(c("terra", "sf", "dplyr", "tidyr", "ggplot2", "rnaturalearth", "usethis", "remotes"))
 
 remotes::install_github("GlobalFishingWatch/gfwr")
 ```
