@@ -163,7 +163,7 @@ Much nicer! Why do you think there is no fishing effort around the islands? Is t
 <details>
 <summary>Click for answers!</summary>
 
-Lets get the 124nm boundary for Vanuatu from Marine Regions and plot that:
+Lets get the 24nm boundary for Vanuatu from Marine Regions and plot that:
 
 ```{r}
 #| class-source: fold-hide
